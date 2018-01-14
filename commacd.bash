@@ -36,8 +36,11 @@ _command_cd() {
 # show match selection menu
 _commacd_choose_match() {
   local matches=("$@")
+  local alpha_index=($(_commacd_alhpa_index ${#matches[@]}))
+  # https://github.com/shyiko/commacd/issues/12
+  trap 'trap - SIGINT; stty '"$(stty -g)" SIGINT
   for i in "${!matches[@]}"; do
-    printf "%s\t%s\n" "$((i+${COMMACD_SEQSTART:-0}))" "${matches[$i]}" >&2
+    printf " [%s]\t%s\n" "${alpha_index[$i]}" "${matches[$i]}" >&2
   done
   local selection;
   local threshold=$((11-${COMMACD_SEQSTART:-0}))
@@ -46,11 +49,39 @@ _commacd_choose_match() {
   else
     read -e -p ': ' selection >&2 
   fi
+  for i in "${!alpha_index[@]}"; do 
+    if [[ "${alpha_index[$i]}" == "$selection" ]]; then
+      selection=$i
+    fi
+  done
   if [[ -n "$selection" ]]; then
     echo -n "${matches[$((selection-${COMMACD_SEQSTART:-0}))]}"
   else
     echo -n "$PWD"
   fi
+  # make sure trap is removed regardless of whether read -e ... was interrupted or not
+  trap - SIGINT
+}
+
+_commacd_alhpa_index() {
+  local counter=$1
+  local alpha_index=(a s d f g h j k l)
+  local j=0
+  local k=0
+  for i in "${!alpha_index[@]}"; do
+    echo "${alpha_index[$i]}"
+  done
+  counter=$((counter - 9))
+  while [ $counter -gt 0 ]; do
+    echo "${alpha_index[$j]}${alpha_index[$k]}"
+    if [[ "$k" -eq 9 ]]; then
+      j=$((j+1))
+      k=0
+    else
+      k=$((k+1))
+    fi
+    counter=$((counter-1))      
+  done
 }
 
 _commacd_prefix_glob() (
@@ -87,19 +118,14 @@ _commacd_forward_by_prefix() {
 _commacd_forward() {
   if [[ -z "$*" ]]; then return 1; fi
   local IFS=$'\n'
-  local dir=($(_commacd_forward_by_prefix "$@"))
+  a=$(echo $@ | sed -e 's| |/|g')
+  local dir=($(_commacd_forward_by_prefix "$a"))
   if [[ "$COMMACD_NOTTY" == "on" ]]; then
-    printf "%s\n" "${dir[@]}"
-    return
+   printf "%s\n" "${dir[a]}"
+   return
   fi
   if [[ ${#dir[@]} -gt 1 ]]; then
-    # https://github.com/shyiko/commacd/issues/12
-    trap 'trap - SIGINT; stty '"$(stty -g)" SIGINT
-
     dir=$(_commacd_choose_match "${dir[@]}")
-
-    # make sure trap is removed regardless of whether read -e ... was interrupted or not
-    trap - SIGINT
     if [[ -z "$dir" ]]; then return 1; fi
   fi
   _command_cd "$dir"
