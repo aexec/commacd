@@ -7,8 +7,10 @@
 #   COMMACD_NOFUZZYFALLBACK - set it to "on" if you don't want commacd to use "fuzzy matching" as a fallback for
 #     "no matches by prefix" (introduced in 0.2.0)
 #   COMMACD_SEQSTART - set it to 1 if you want "multiple choices" to start from 1 instead of 0
+#   COMMACD_IMPLICITENTER - set it to "on" to avoid pressing <ENTER> when number of options (to select from) 
+#     is less than 10 (introduced in 0.4.0)
 #
-# @version 0.3.4
+# @version 0.4.0
 # @author Stanley Shyiko <stanley.shyiko@gmail.com>
 # @license MIT
 
@@ -38,8 +40,9 @@ _commacd_choose_match() {
     printf "%s\t%s\n" "$((i+${COMMACD_SEQSTART:-0}))" "${matches[$i]}" >&2
   done
   local selection;
-  if [[ ${#matches[@]} -lt 11 ]]; then
-    read -n1 -s -p ': ' selection >&2
+  local threshold=$((11-${COMMACD_SEQSTART:-0}))
+  if [[ "$COMMACD_IMPLICITENTER" == "on" && ${#matches[@]} -lt $threshold ]]; then
+    read -n1 -e -p ': ' selection >&2
   else
     read -e -p ': ' selection >&2 
   fi
@@ -71,7 +74,7 @@ _commacd_glob() (
 
 _commacd_forward_by_prefix() {
   local matches=($(_commacd_expand "$(_commacd_prefix_glob "$*")"))
-  if [[ -z "$COMMACD_NOFUZZYFALLBACK" && ${#matches[@]} -eq 0 ]]; then
+  if [[ "$COMMACD_NOFUZZYFALLBACK" != "on" && ${#matches[@]} -eq 0 ]]; then
     matches=($(_commacd_expand "$(_commacd_glob "$*")"))
   fi
   case ${#matches[@]} in
@@ -147,7 +150,7 @@ _commacd_backward() {
   case $# in
     0) dir=$(_commacd_backward_vcs_root);;
     1) dir=$(_commacd_backward_by_prefix "$*")
-       if [[ -z "$COMMACD_NOFUZZYFALLBACK" && "$dir" == "$PWD" ]]; then
+       if [[ "$COMMACD_NOFUZZYFALLBACK" != "on" && "$dir" == "$PWD" ]]; then
          dir=$(_commacd_backward_by_prefix "*$*")
        fi;;
     2) dir=$(_commacd_backward_substitute "$@");;
@@ -171,7 +174,7 @@ _commacd_backward_forward_by_prefix() {
   while [[ -n "$dir" ]]; do
     dir="${dir%/*}"
     matches=($(_commacd_expand "$dir/$(_commacd_prefix_glob "$*")"))
-    if [[ -z "$COMMACD_NOFUZZYFALLBACK" && ${#matches[@]} -eq 0 ]]; then
+    if [[ "$COMMACD_NOFUZZYFALLBACK" != "on" && ${#matches[@]} -eq 0 ]]; then
       matches=($(_commacd_expand "$dir/$(_commacd_glob "$*")"))
     fi
     case ${#matches[@]} in
